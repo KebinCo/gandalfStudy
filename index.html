@@ -6,17 +6,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
 :root {
-  --bg: #0f1220;
-  --card: #1b1f3b;
+  --bg: #0b0e1a;
+  --card: #171b33;
   --accent: #7c83ff;
   --good: #4caf50;
+  --mid: #ffb300;
   --bad: #e53935;
   --text: #eaeaf0;
 }
 
 body {
   margin: 0;
-  background: radial-gradient(circle at top, #1b1f3b, #0f1220);
+  background: radial-gradient(circle at top, #1a1f44, var(--bg));
   font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--text);
   display: flex;
@@ -31,36 +32,48 @@ body {
 
 /* TRUST BAR */
 #trustContainer {
-  background: #11142b;
-  border-radius: 14px;
-  padding: 8px;
-  margin-bottom: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(10,12,30,0.9);
+  backdrop-filter: blur(6px);
+  border-radius: 16px;
+  padding: 10px;
+  margin-bottom: 14px;
 }
 
 #trustLabel {
   font-size: 12px;
   opacity: 0.7;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 #trustBar {
-  height: 14px;
-  background: #333;
-  border-radius: 10px;
+  height: 16px;
+  background: #222;
+  border-radius: 12px;
   overflow: hidden;
 }
 
 #trustFill {
   height: 100%;
   width: 70%;
-  background: linear-gradient(90deg, var(--bad), var(--good));
-  transition: width 0.3s;
+  background: linear-gradient(90deg, var(--bad), var(--mid), var(--good));
+  animation: bubble 4s linear infinite;
+  transition: width 0.4s;
+}
+
+@keyframes bubble {
+  0% { filter: hue-rotate(0deg); }
+  50% { filter: hue-rotate(20deg); }
+  100% { filter: hue-rotate(0deg); }
 }
 
 /* GANDALF */
 #gandalf {
   text-align: center;
   margin: 14px 0;
+  position: relative;
 }
 
 #gandalfEmoji {
@@ -71,31 +84,48 @@ body {
   font-size: 42px;
 }
 
+/* WORK MODE ANIMATION */
+.working #gandalfEmoji {
+  animation: float 3s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.working .card {
+  filter: blur(3px) brightness(0.9);
+}
+
+@keyframes float {
+  0% { transform: translateY(0); opacity: 0.8; }
+  50% { transform: translateY(-10px); opacity: 1; }
+  100% { transform: translateY(0); opacity: 0.8; }
+}
+
 /* CARD */
 .card {
   background: var(--card);
-  border-radius: 16px;
-  padding: 14px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.45);
+  transition: filter 0.4s;
 }
 
 #speech {
   min-height: 80px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 /* CONTROLS */
 #controls {
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
-input, button, select {
+input, button {
   width: 100%;
   padding: 10px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: none;
   margin-top: 8px;
-  background: #11142b;
+  background: #0e1230;
   color: var(--text);
   font-size: 14px;
 }
@@ -105,18 +135,18 @@ button {
   cursor: pointer;
 }
 
-button:hover {
-  filter: brightness(1.1);
+button.secondary {
+  background: #33396b;
 }
 
-#choices button {
-  margin-top: 6px;
-}
+button:hover { filter: brightness(1.1); }
+
+#choices button { margin-top: 6px; }
 
 #timer {
   text-align: center;
-  font-size: 26px;
-  margin-top: 10px;
+  font-size: 28px;
+  margin-top: 12px;
 }
 </style>
 </head>
@@ -148,42 +178,18 @@ button:hover {
 
 <script>
 /***********************
- * PERSISTENCE
+ * STATE + STORAGE
  ***********************/
-const STORAGE_KEY = "gandalfStudyState";
-const todayKey = new Date().toDateString();
+const KEY = "gandalfStudyState";
+const today = new Date().toDateString();
+let state = JSON.parse(localStorage.getItem(KEY)) || null;
 
-let state = JSON.parse(localStorage.getItem(STORAGE_KEY)) || null;
-
-if (!state || state.date !== todayKey) {
-  state = {
-    date: todayKey,
-    trust: 70,
-    tasks: [],
-    mode: "init",
-    currentTask: null
-  };
+if (!state || state.date !== today) {
+  state = { date: today, trust: 70, tasks: [], mode: "init" };
   save();
 }
 
-function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-/***********************
- * TEXT BANK
- ***********************/
-const lines = {
-  greet: "A new day rises. Tell me your tasks.",
-  idle: "What will you do now?",
-  studyAskTime: "For how long will you study?",
-  breakAskTime: "How long will you be gone?",
-  workStart: "Very well. I shall keep watch.",
-  breakOk: "Go, but return swiftly.",
-  late: "You are late. This displeases me.",
-  proud: "Well done. You honor your word.",
-  refuse: "No. Earn your rest first."
-};
+function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
 
 /***********************
  * UI HELPERS
@@ -200,29 +206,31 @@ function speak(text, mood="🙂") {
   face.innerText = mood;
 }
 
-function updateTrust(delta) {
-  state.trust = Math.max(0, Math.min(100, state.trust + delta));
+function updateTrust(d){
+  state.trust = Math.max(0, Math.min(100, state.trust + d));
   trustFill.style.width = state.trust + "%";
   save();
 }
 
 /***********************
- * TIMER (SAFE)
+ * TIMER
  ***********************/
 let interval = null;
+let endTime = null;
 
 function startTimer(mins, onEnd) {
   clearInterval(interval);
-  const end = Date.now() + mins * 60000;
+  document.body.classList.add("working");
+  endTime = Date.now() + mins * 60000;
 
   interval = setInterval(() => {
-    const left = Math.max(0, end - Date.now());
+    const left = Math.max(0, endTime - Date.now());
     const m = Math.floor(left / 60000);
     const s = Math.floor((left % 60000) / 1000);
-    timerEl.innerText = `${m}:${s.toString().padStart(2, "0")}`;
-
+    timerEl.innerText = `${m}:${s.toString().padStart(2,"0")}`;
     if (left <= 0) {
       clearInterval(interval);
+      document.body.classList.remove("working");
       timerEl.innerText = "";
       onEnd();
     }
@@ -230,80 +238,95 @@ function startTimer(mins, onEnd) {
 }
 
 /***********************
- * CHOICE BUTTONS
+ * CONTROLS
  ***********************/
-function showChoices(list, callback) {
+function showButtons(list) {
   choices.innerHTML = "";
-  list.forEach(item => {
-    const btn = document.createElement("button");
-    btn.innerText = item;
-    btn.onclick = () => callback(item);
-    choices.appendChild(btn);
-  });
+  list.forEach(b => choices.appendChild(b));
+}
+
+function button(text, cls="", fn){
+  const b = document.createElement("button");
+  b.innerText = text;
+  if (cls) b.classList.add(cls);
+  b.onclick = fn;
+  return b;
+}
+
+function showClock(min,max,step,cb){
+  choices.innerHTML = "";
+  const label = document.createElement("div");
+  label.style.fontSize = "22px";
+  const slider = document.createElement("input");
+  slider.type = "range"; slider.min=min; slider.max=max; slider.step=step; slider.value=min;
+  slider.oninput = ()=> label.innerText = slider.value+" minutes";
+  label.innerText = slider.value+" minutes";
+  showButtons([
+    label,
+    slider,
+    button("Set Time","",()=>cb(parseInt(slider.value)))
+  ]);
 }
 
 /***********************
- * CORE LOGIC
+ * LOGIC
  ***********************/
-function render() {
-  trustFill.style.width = state.trust + "%";
+function render(){
+  trustFill.style.width = state.trust+"%";
   input.style.display = "none";
   document.getElementById("sendBtn").style.display = "none";
   choices.innerHTML = "";
 
-  if (state.mode === "init") {
-    speak(lines.greet);
+  if (state.mode === "init"){
+    speak("A new day begins. Name your tasks.");
     input.style.display = "block";
     document.getElementById("sendBtn").style.display = "block";
     return;
   }
 
-  if (state.mode === "idle") {
-    speak(lines.idle);
-    showChoices([...state.tasks, "Break"], choice => {
-      if (choice === "Break") {
-        if (state.trust < 30) {
-          speak(lines.refuse, "😐");
-          return;
-        }
-        state.mode = "askBreak";
-        render();
-      } else {
-        state.currentTask = choice;
-        state.mode = "askStudy";
-        render();
-      }
-    });
+  if (state.mode === "idle"){
+    speak("What will you do now?");
+    showButtons([
+      ...state.tasks.map(t => button(t,"",()=>{ state.mode="askStudy"; save(); render(); })),
+      button("Take a break","secondary",()=>{
+        if (state.trust < 30) speak("No. Work first.","😐");
+        else { state.mode="askBreak"; save(); render(); }
+      })
+    ]);
   }
 
-  if (state.mode === "askStudy") {
-    speak(lines.studyAskTime);
-    showChoices(["25", "40", "60"], mins => {
-      speak(lines.workStart, "🧐");
-      state.mode = "working";
-      save();
-      startTimer(parseInt(mins), () => {
-        speak(lines.proud, "😄");
-        updateTrust(+10);
-        state.mode = "idle";
-        save();
-        render();
+  if (state.mode === "askStudy"){
+    speak("Set your study time.","🧐");
+    showClock(15,120,5,mins=>{
+      speak("Focus. I am watching.","👁️");
+      state.mode="working"; save();
+      startTimer(mins,()=>{
+        speak("Well done.","😄"); updateTrust(+10);
+        state.mode="idle"; save(); render();
       });
     });
   }
 
-  if (state.mode === "askBreak") {
-    speak(lines.breakAskTime);
-    showChoices(["5", "10", "15"], mins => {
-      speak(lines.breakOk, "😐");
-      state.mode = "break";
-      save();
-      startTimer(parseInt(mins), () => {
-        speak(lines.late, "😠");
-        updateTrust(-10);
-        state.mode = "idle";
-        save();
-        render();
+  if (state.mode === "working"){
+    showButtons([
+      button("Emergency break","secondary",()=>{
+        updateTrust(-15);
+        speak("You broke focus.","😠");
+        clearInterval(interval);
+        document.body.classList.remove("working");
+        state.mode="askBreak"; save(); render();
+      })
+    ]);
+  }
+
+  if (state.mode === "askBreak"){
+    speak("Set break duration.","😐");
+    showClock(5,30,5,mins=>{
+      speak("Return on time.","👀");
+      state.mode="break"; save();
+      startTimer(mins,()=>{
+        speak("You lingered.","😠"); updateTrust(-10);
+        state.mode="idle"; save(); render();
       });
     });
   }
@@ -312,13 +335,9 @@ function render() {
 /***********************
  * EVENTS
  ***********************/
-document.getElementById("sendBtn").onclick = () => {
-  const value = input.value.trim();
-  if (!value) return;
-  state.tasks = value.split(",").map(v => v.trim());
-  state.mode = "idle";
-  save();
-  render();
+document.getElementById("sendBtn").onclick = ()=>{
+  state.tasks = input.value.split(",").map(v=>v.trim());
+  state.mode="idle"; save(); render();
 };
 
 render();
