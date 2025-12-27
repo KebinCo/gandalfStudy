@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Study with Gandalf</title>
+<style>
+  body {
+    background: #1e1e2f;
+    color: #eee;
+    font-family: system-ui, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 30px;
+  }
+
+  #app {
+    width: 360px;
+    background: #2a2a40;
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: 0 0 20px rgba(0,0,0,.4);
+  }
+
+  #gandalf {
+    text-align: center;
+    font-size: 64px;
+  }
+
+  #face {
+    font-size: 48px;
+  }
+
+  #speech {
+    background: #3a3a5c;
+    border-radius: 10px;
+    padding: 12px;
+    margin: 10px 0;
+    min-height: 70px;
+  }
+
+  #trustBar {
+    height: 12px;
+    background: #555;
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 10px 0;
+  }
+
+  #trustFill {
+    height: 100%;
+    width: 70%;
+    background: linear-gradient(90deg, #ff5555, #55ff88);
+    transition: width .3s;
+  }
+
+  input, button {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 6px;
+    border: none;
+    font-size: 14px;
+  }
+
+  button {
+    background: #6a6aff;
+    color: white;
+    cursor: pointer;
+  }
+
+  button:hover {
+    background: #7b7bff;
+  }
+
+  #timer {
+    text-align: center;
+    font-size: 24px;
+    margin-top: 10px;
+  }
+</style>
+</head>
+
+<body>
+<div id="app">
+  <div id="gandalf">
+    🧙‍♂️
+    <div id="face">🙂</div>
+  </div>
+
+  <div id="speech"></div>
+
+  <div id="trustBar">
+    <div id="trustFill"></div>
+  </div>
+
+  <input id="input" placeholder="Type here..." />
+  <button onclick="submit()">Send</button>
+
+  <div id="timer"></div>
+</div>
+
+<script>
+/* =======================
+   CORE STATE (FAIL-SAFE)
+======================= */
+let trust = 70;
+let mode = "init"; // init | idle | working | break
+let tasks = [];
+let currentTimer = null;
+let deadline = null;
+
+/* =======================
+   TEXT MAD-LIBS
+======================= */
+const say = {
+  greet: [
+    "A new day begins. What quests must you complete?",
+    "Tell me your tasks, and I shall watch."
+  ],
+  idle: [
+    "What are you doing now?",
+    "Speak. How do you spend this moment?"
+  ],
+  study: [
+    "Very well. Focus. I am watching.",
+    "Good. Knowledge is power."
+  ],
+  breakOk: [
+    "Go then. But return swiftly.",
+    "Fine. Do not linger."
+  ],
+  angry: [
+    "You are late.",
+    "You test my patience."
+  ],
+  proud: [
+    "Well done. I am pleased.",
+    "Excellent discipline."
+  ],
+  refuse: [
+    "No. You must work first.",
+    "Earn your rest."
+  ]
+};
+
+function random(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/* =======================
+   UI HELPERS
+======================= */
+function speak(text, face="🙂") {
+  document.getElementById("speech").innerText = text;
+  document.getElementById("face").innerText = face;
+}
+
+function updateTrust(amount) {
+  trust = Math.max(0, Math.min(100, trust + amount));
+  document.getElementById("trustFill").style.width = trust + "%";
+}
+
+/* =======================
+   TIMER LOGIC (SAFE)
+======================= */
+function startTimer(minutes, onEnd) {
+  clearTimer();
+  deadline = Date.now() + minutes * 60000;
+
+  currentTimer = setInterval(() => {
+    let left = Math.max(0, deadline - Date.now());
+    let m = Math.floor(left / 60000);
+    let s = Math.floor((left % 60000) / 1000);
+    document.getElementById("timer").innerText =
+      `${m}:${s.toString().padStart(2,"0")}`;
+
+    if (left <= 0) {
+      clearTimer();
+      onEnd();
+    }
+  }, 1000);
+}
+
+function clearTimer() {
+  if (currentTimer) {
+    clearInterval(currentTimer);
+    currentTimer = null;
+    document.getElementById("timer").innerText = "";
+  }
+}
+
+/* =======================
+   MAIN LOGIC
+======================= */
+function submit() {
+  const input = document.getElementById("input");
+  const text = input.value.trim();
+  input.value = "";
+  if (!text) return;
+
+  if (mode === "init") {
+    tasks = text.split(",").map(t => t.trim());
+    speak(random(say.idle));
+    mode = "idle";
+    return;
+  }
+
+  if (mode === "idle") {
+    if (text.includes("study")) {
+      speak("For how many minutes?");
+      mode = "askStudyTime";
+    } else {
+      if (trust < 30) {
+        speak(random(say.refuse), "😐");
+        return;
+      }
+      speak("How long?");
+      mode = "askBreakTime";
+    }
+    return;
+  }
+
+  if (mode === "askStudyTime") {
+    let mins = parseInt(text);
+    if (isNaN(mins)) return;
+    speak(random(say.study), "🧐");
+    mode = "working";
+    startTimer(mins, () => {
+      speak(random(say.proud), "😄");
+      updateTrust(+10);
+      mode = "idle";
+    });
+    return;
+  }
+
+  if (mode === "askBreakTime") {
+    let mins = parseInt(text);
+    if (isNaN(mins)) return;
+    speak(random(say.breakOk), "😐");
+    mode = "break";
+    startTimer(mins, () => {
+      speak(random(say.angry), "😠");
+      updateTrust(-10);
+      mode = "idle";
+    });
+  }
+}
+
+/* =======================
+   START
+======================= */
+speak(random(say.greet));
+</script>
+</body>
+</html>
